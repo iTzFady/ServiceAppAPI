@@ -17,6 +17,9 @@ namespace ServiceApp.Controllers
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreateRating([FromBody] RatingDto ratingDto) {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var serviceRequest = await _db.ServiceRequests.FindAsync(ratingDto.ServiceRequestId);
             if (serviceRequest == null)
                 return NotFound("Service request not found.");

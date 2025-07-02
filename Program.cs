@@ -5,6 +5,8 @@ using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
+using ServiceApp.Models;
 
 Env.Load();
 
@@ -20,6 +22,8 @@ var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username=
 var jwtKey = Environment.GetEnvironmentVariable("JWT__KEY");
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

@@ -1,10 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ServiceApp.Data;
 using ServiceApp.Models;
+using ServiceApp.Models.DTOs;
 using ServiceApp.Models.Enums;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -18,30 +20,66 @@ namespace ServiceApp.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IConfiguration _config;
-        public UserController(AppDbContext db, IConfiguration config)
+        private readonly IPasswordHasher<User> _passwordHasher;
+        public UserController(AppDbContext db, IConfiguration config, IPasswordHasher<User> passwordHasher)
         {
             _db = db;
             _config = config;
+            _passwordHasher = passwordHasher;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> CreateUser([FromBody] User user) {
-            if (await _db.Users.AnyAsync(u => u.Email == user.Email))
+        public async Task<IActionResult> CreateUser([FromBody] RegisterDto registerRequest) {
+
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            if (await _db.Users.AnyAsync(u => u.Email == registerRequest.Email))
                 return BadRequest("Email already registered");
 
+            var user = new User
+            {
+                Name = registerRequest.Name,
+                Role = registerRequest.Role,
+                Email = registerRequest.Email,
+                PhoneNumber = registerRequest.PhoneNumber,
+                NationalNumber = registerRequest.NationalNumber,
+                Region = registerRequest.Region,
+                WorkerSpecialty = registerRequest.WorkerSpecialty,
+            };
+            user.Password = _passwordHasher.HashPassword(user, registerRequest.Password);
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
-            return Ok(user);
+            return Ok( new {
+                user.Id,
+                user.Name,
+                user.Email,
+                user.Role,
+                user.Region,
+                user.WorkerSpecialty
+            });
         }
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest request) {
+        public async Task<IActionResult> Login([FromBody] LoginDto request) {
+
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var jwtKey = Environment.GetEnvironmentVariable("JWT__KEY");
             var user = await _db.Users
-        .           FirstOrDefaultAsync(u => u.Email == request.Email && u.Password == request.Password);
+        .           FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null)
             {
-                return Unauthorized(new { message = "Invalid email or password" });
+                return Unauthorized(new { message = "Invalid credentials." });
             }
+
+            var result = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
+
+            if (result == PasswordVerificationResult.Failed)
+            {
+                return Unauthorized(new { message = "Invalid credentials." });
+            }
+
             if (user.IsBanned)
                 return Unauthorized("User is Banned");
             
@@ -81,7 +119,7 @@ namespace ServiceApp.Controllers
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
-        [Authorize(Roles = "Client,Worker")]
+        [Authorize]
         [HttpGet("workers")]
         public async Task<IActionResult> GetAvailableWorkers([FromQuery] Specialty specialty) {
             var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true && u.WorkerSpecialty == specialty);

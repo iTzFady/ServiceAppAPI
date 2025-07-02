@@ -18,6 +18,9 @@ namespace ServiceApp.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateRequest([FromBody] ServiceRequestDto dto) {
 
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var request = new ServiceRequest
             {
                 Id = Guid.NewGuid(),
@@ -36,7 +39,10 @@ namespace ServiceApp.Controllers
         }
         [Authorize(Roles = "Worker")]
         [HttpPut("{id}/status")]
-        public async Task<IActionResult> UpdateStatus(Guid id , [FromQuery] RequestStatus status) { 
+        public async Task<IActionResult> UpdateStatus(Guid id , [FromQuery] RequestStatus status) {
+
+            if (id == Guid.Empty) return BadRequest("Invalid User ID");
+
             var req = await _db.ServiceRequests.FindAsync(id);
             if (req == null) return NotFound();
 
@@ -51,6 +57,8 @@ namespace ServiceApp.Controllers
         [HttpGet("worker/{workerId}")]
         public async Task<IActionResult> GetWorkerRequests(Guid workerId)
         {
+            if (workerId == Guid.Empty) return BadRequest("Invalid User ID"); 
+
             var activeStatuses = new[] { RequestStatus.Pending, RequestStatus.Accepted };
 
             var requests = await _db.ServiceRequests
@@ -70,6 +78,8 @@ namespace ServiceApp.Controllers
         [HttpPut("{id}/complete")]
         public async Task<IActionResult> MarkAsCompleted(Guid id)
         {
+            if (id == Guid.Empty) return BadRequest("Invalid User ID");
+
             var req = await _db.ServiceRequests.FindAsync(id);
             if (req == null) return NotFound();
 

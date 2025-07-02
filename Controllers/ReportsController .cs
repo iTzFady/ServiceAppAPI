@@ -19,7 +19,10 @@ namespace ServiceApp.Controllers
 
         [Authorize]
         [HttpPost("report/{workerId}")]
-        public async Task<IActionResult> ReportUser([FromBody] Guid workerId ,[FromBody] string report) {
+        public async Task<IActionResult> ReportUser([FromRoute] Guid workerId ,[FromBody] string report) {
+
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
             var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
