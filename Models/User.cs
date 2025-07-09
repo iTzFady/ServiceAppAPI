@@ -1,8 +1,12 @@
-﻿using ServiceApp.Models.Enums;
+﻿using Microsoft.EntityFrameworkCore;
+using ServiceApp.Models.Enums;
 using System.ComponentModel.DataAnnotations;
 
 namespace ServiceApp.Models
 {
+    [Index(nameof(PhoneNumber), IsUnique = true)]
+    [Index(nameof(NationalNumber), IsUnique = true)]
+    [Index(nameof(Email) , IsUnique = true)]
     public class User
     {
         [Key]

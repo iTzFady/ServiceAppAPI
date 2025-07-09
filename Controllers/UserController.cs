@@ -11,6 +11,7 @@ using ServiceApp.Models.Enums;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ServiceApp.Controllers
 {
@@ -33,6 +34,20 @@ namespace ServiceApp.Controllers
 
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            if (!Regex.IsMatch(registerRequest.PhoneNumber, @"^(010|011|012|015)[0-9]{8}$"))
+                return BadRequest("Invalid phone number format.");
+
+            if (await _db.Users.AnyAsync(u => u.PhoneNumber == registerRequest.PhoneNumber))
+                return BadRequest("Phone number already in use");
+
+            if (registerRequest.NationalNumber != null)
+            {
+                if (!Regex.IsMatch(registerRequest.NationalNumber, @"^[23][0-9]{13}$"))
+                    return BadRequest("Invalid national number format.");
+                if (await _db.Users.AnyAsync(u => u.NationalNumber == registerRequest.NationalNumber))
+                    return BadRequest("National number already in use");
+            }
 
             if (await _db.Users.AnyAsync(u => u.Email == registerRequest.Email))
                 return BadRequest("Email already registered");
@@ -59,6 +74,8 @@ namespace ServiceApp.Controllers
                 user.WorkerSpecialty
             });
         }
+        
+        
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto request) {
 
@@ -121,11 +138,18 @@ namespace ServiceApp.Controllers
         }
         [Authorize]
         [HttpGet("workers")]
-        public async Task<IActionResult> GetAvailableWorkers([FromQuery] Specialty specialty) {
-            var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true && u.WorkerSpecialty == specialty);
+        public async Task<IActionResult> GetAvailableWorkers()
+        {
+            var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true);
             var workers = await query.ToListAsync();
             return Ok(workers);
         }
+        //public async Task<IActionResult> GetAvailableWorkers([FromQuery] Specialty specialty) {
+
+        //    var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true && u.WorkerSpecialty == specialty);
+        //    var workers = await query.ToListAsync();
+        //    return Ok(workers);
+        //}
         [Authorize]
         [HttpGet("me")]
         public IActionResult GetCurrentUser()

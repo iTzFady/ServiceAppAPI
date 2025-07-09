@@ -5,6 +5,7 @@ using ServiceApp.Data;
 using ServiceApp.Models;
 using ServiceApp.Models.DTOs;
 using ServiceApp.Models.Enums;
+using System.Security.Claims;
 
 namespace ServiceApp.Controllers
 {
@@ -16,10 +17,27 @@ namespace ServiceApp.Controllers
         public RequestsController(AppDbContext db) => _db = db;
 
         [HttpPost]
-        public async Task<IActionResult> CreateRequest([FromBody] ServiceRequestDto dto) {
+        [Authorize]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> CreateRequest([FromForm] ServiceRequestDto dto , [FromForm] List<IFormFile>? images) {
 
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            var imagePaths = new List<string>();
+
+            if (images != null && images.Any()) {
+                var uploadDir = Path.Combine("wwwroot" , "uploads");
+                Directory.CreateDirectory(uploadDir);
+
+                foreach (var image in images) {
+                    var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(image.FileName)}";
+                    var savePath = Path.Combine(uploadDir, fileName);
+                    using var stream = new FileStream(savePath, FileMode.Create);
+                    await image.CopyToAsync(stream);
+                    imagePaths.Add($"/uploads/{fileName}");
+                }
+            }
 
             var request = new ServiceRequest
             {
@@ -30,7 +48,8 @@ namespace ServiceApp.Controllers
                 Region = dto.Region,
                 SpecialtyRequired = dto.SpecialtyRequired,
                 RequestedTime = DateTime.UtcNow,
-                Status = RequestStatus.Pending
+                Status = RequestStatus.Pending,
+                ImageUrls = imagePaths
             };
 
             _db.ServiceRequests.Add(request);
@@ -38,21 +57,70 @@ namespace ServiceApp.Controllers
             return Ok(request);
         }
         [Authorize(Roles = "Worker")]
-        [HttpPut("{id}/status")]
-        public async Task<IActionResult> UpdateStatus(Guid id , [FromQuery] RequestStatus status) {
-
-            if (id == Guid.Empty) return BadRequest("Invalid User ID");
+        [HttpPut("{id}/accept")]
+        public async Task<IActionResult> AcceptRequest(Guid id)
+        {
+            var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
             var req = await _db.ServiceRequests.FindAsync(id);
             if (req == null) return NotFound();
 
-            req.Status = status;
-
-            if (req.Status == RequestStatus.Completed) req.CompletedTime = DateTime.UtcNow;
-
+            req.RequestedForUserId = userId;
+            req.Status = RequestStatus.Accepted;
             await _db.SaveChangesAsync();
-            return Ok(req);
+
+            var client = await _db.Users.FindAsync(req.RequestedByUserId);
+            var worker = await _db.Users.FindAsync(userId);
+
+            return Ok(new
+            {
+                request = req,
+                clientPhone = client?.PhoneNumber,
+                workerPhone = worker?.PhoneNumber
+            });
         }
+
+        [Authorize(Roles = "Worker")]
+        [HttpDelete("{id}/reject")]
+        public async Task<IActionResult> RejectRequest(Guid id)
+        {
+            var req = await _db.ServiceRequests.FindAsync(id);
+            if (req == null) return NotFound();
+
+            _db.ServiceRequests.Remove(req);
+            await _db.SaveChangesAsync();
+
+            return Ok("Request rejected and deleted.");
+        }
+
+
+        [Authorize]
+        [HttpPut("{id}/cancel")]
+        public async Task<IActionResult> CancelRequest(Guid id)
+        {
+            var req = await _db.ServiceRequests.FindAsync(id);
+            if (req == null) return NotFound();
+
+            req.Status = RequestStatus.Canceled;
+            await _db.SaveChangesAsync();
+
+            return Ok("Request canceled.");
+        }
+
+        [Authorize(Roles = "Worker")]
+        [HttpPut("{id}/complete")]
+        public async Task<IActionResult> CompleteRequest(Guid id)
+        {
+            var req = await _db.ServiceRequests.FindAsync(id);
+            if (req == null) return NotFound();
+
+            req.Status = RequestStatus.Completed;
+            req.CompletedTime = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return Ok("Request completed.");
+        }
+
         [Authorize(Roles = "Worker")]
         [HttpGet("worker/{workerId}")]
         public async Task<IActionResult> GetWorkerRequests(Guid workerId)
@@ -73,21 +141,6 @@ namespace ServiceApp.Controllers
             };
 
             return Ok(result);
-        }
-        [Authorize(Roles = "Worker")]
-        [HttpPut("{id}/complete")]
-        public async Task<IActionResult> MarkAsCompleted(Guid id)
-        {
-            if (id == Guid.Empty) return BadRequest("Invalid User ID");
-
-            var req = await _db.ServiceRequests.FindAsync(id);
-            if (req == null) return NotFound();
-
-            req.Status = RequestStatus.Completed;
-            req.CompletedTime = DateTime.UtcNow;
-
-            await _db.SaveChangesAsync();
-            return Ok(req);
         }
     }
 }

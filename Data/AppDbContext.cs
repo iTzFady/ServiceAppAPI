@@ -14,6 +14,13 @@ namespace ServiceApp.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<ServiceRequest>()
+                .Property(e => e.ImageUrls)
+                .HasConversion(
+                    v => string.Join(';', v),
+                    v => v.Split(';', StringSplitOptions.RemoveEmptyEntries).ToList()
+                );
+
             modelBuilder.Entity<User>()
                 .Property(x => x.Id)
                 .HasDefaultValueSql("gen_random_uuid()");

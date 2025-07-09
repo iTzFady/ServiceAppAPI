@@ -21,5 +21,8 @@ namespace ServiceApp.Models
 
         [ForeignKey("RequestedForUserId")]
         public User RequestedFor { get; set; }
+
+        public List<string>? ImageUrls { get; set; }
+
     }
 }
