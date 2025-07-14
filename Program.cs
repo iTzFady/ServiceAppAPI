@@ -22,6 +22,8 @@ var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username=
 
 var jwtKey = Environment.GetEnvironmentVariable("JWT__KEY");
 
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -77,4 +79,4 @@ app.UseAuthorization();
 app.UseStaticFiles();
 app.MapControllers();
 
-app.Run();
+app.Run($"http://0.0.0.0:{port}");
