@@ -19,18 +19,21 @@ namespace ServiceApp.Controllers
         [HttpPost]
         [Authorize]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> CreateRequest([FromForm] ServiceRequestDto dto , [FromForm] List<IFormFile>? images) {
+        public async Task<IActionResult> CreateRequest([FromForm] ServiceRequestDto dto, [FromForm] List<IFormFile>? images)
+        {
 
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
             var imagePaths = new List<string>();
 
-            if (images != null && images.Any()) {
-                var uploadDir = Path.Combine("wwwroot" , "uploads");
+            if (images != null && images.Any())
+            {
+                var uploadDir = Path.Combine("wwwroot", "uploads");
                 Directory.CreateDirectory(uploadDir);
 
-                foreach (var image in images) {
+                foreach (var image in images)
+                {
                     var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(image.FileName)}";
                     var savePath = Path.Combine(uploadDir, fileName);
                     using var stream = new FileStream(savePath, FileMode.Create);
@@ -74,7 +77,6 @@ namespace ServiceApp.Controllers
 
             return Ok(new
             {
-                request = req,
                 clientPhone = client?.PhoneNumber,
                 workerPhone = worker?.PhoneNumber
             });
@@ -125,7 +127,7 @@ namespace ServiceApp.Controllers
         [HttpGet("worker/{workerId}")]
         public async Task<IActionResult> GetWorkerRequests(Guid workerId)
         {
-            if (workerId == Guid.Empty) return BadRequest("Invalid User ID"); 
+            if (workerId == Guid.Empty) return BadRequest("Invalid User ID");
 
             var activeStatuses = new[] { RequestStatus.Pending, RequestStatus.Accepted };
 

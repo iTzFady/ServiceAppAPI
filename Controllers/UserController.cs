@@ -10,6 +10,7 @@ using ServiceApp.Models.DTOs;
 using ServiceApp.Models.Enums;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -22,15 +23,19 @@ namespace ServiceApp.Controllers
         private readonly AppDbContext _db;
         private readonly IConfiguration _config;
         private readonly IPasswordHasher<User> _passwordHasher;
-        public UserController(AppDbContext db, IConfiguration config, IPasswordHasher<User> passwordHasher)
+        private readonly IEmailService _emailService;
+
+        public UserController(AppDbContext db, IConfiguration config, IPasswordHasher<User> passwordHasher, IEmailService emailService)
         {
             _db = db;
             _config = config;
             _passwordHasher = passwordHasher;
+            _emailService = emailService;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> CreateUser([FromBody] RegisterDto registerRequest) {
+        public async Task<IActionResult> CreateUser([FromBody] RegisterDto registerRequest)
+        {
 
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -61,30 +66,40 @@ namespace ServiceApp.Controllers
                 NationalNumber = registerRequest.NationalNumber,
                 Region = registerRequest.Region,
                 WorkerSpecialty = registerRequest.WorkerSpecialty,
+                EmailConfirmationToken = GenerateToken(),
+                EmailConfirmationTokenExpiry = DateTime.UtcNow.AddHours(24)
             };
             user.Password = _passwordHasher.HashPassword(user, registerRequest.Password);
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
-            return Ok( new {
+            var confirmationLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/confirm-email?token={user.EmailConfirmationToken}&email={user.Email}";
+            await _emailService.SendEmailAsync(
+                user.Email,
+                "Confirm your email",
+                $"Please confirm your email by clicking <a href='{confirmationLink}'>here</a>");
+            return Ok(new
+            {
                 user.Id,
                 user.Name,
                 user.Email,
                 user.Role,
                 user.Region,
-                user.WorkerSpecialty
+                user.WorkerSpecialty,
+                Message = "Registration successful. Please check your email to confirm your account."
             });
         }
-        
-        
+
+
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto request) {
+        public async Task<IActionResult> Login([FromBody] LoginDto request)
+        {
 
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
             var jwtKey = Environment.GetEnvironmentVariable("JWT__KEY");
             var user = await _db.Users
-        .           FirstOrDefaultAsync(u => u.Email == request.Email);
+        .FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null)
             {
                 return Unauthorized(new { message = "Invalid credentials." });
@@ -96,12 +111,13 @@ namespace ServiceApp.Controllers
             {
                 return Unauthorized(new { message = "Invalid credentials." });
             }
-
+            if (!user.EmailConfirmed)
+                return Unauthorized("Please confirm your email before logging in");
             if (user.IsBanned)
                 return Unauthorized("User is Banned");
-            
+
             var token = GenerateJwtToken(user);
-            return Ok(new 
+            return Ok(new
             {
                 token,
                 user = new
@@ -113,6 +129,56 @@ namespace ServiceApp.Controllers
                     user.Region,
                 }
             });
+        }
+        [HttpPost("confirm-email")]
+        public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            if (user == null)
+                return BadRequest("User not found");
+            if (user.EmailConfirmed)
+                return BadRequest("Email already confirmed");
+            if (user.EmailConfirmationToken != dto.Token ||
+                user.EmailConfirmationTokenExpiry < DateTime.UtcNow)
+                return BadRequest("Invalid or expired token");
+            user.EmailConfirmed = true;
+            user.EmailConfirmationToken = null;
+            user.EmailConfirmationTokenExpiry = null;
+            await _db.SaveChangesAsync();
+            return Ok("Email confirmed successfully");
+        }
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            if (user == null)
+                return Ok();
+            user.PasswordResetToken = GenerateToken();
+            user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+            await _db.SaveChangesAsync();
+            var resetLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/reset-password?token={user.PasswordResetToken}&email={user.Email}";
+            await _emailService.SendEmailAsync(
+                user.Email,
+                "Reset your password",
+                $"Please reset your password by clicking <a href='{resetLink}'>here</a>"
+            );
+            return Ok("If an account with this email exists, a password reset link has been sent");
+        }
+        [HttpPost("reset-password/{token}")]
+        public async Task<IActionResult> ResetPassword([FromRoute] string token, [FromBody] ResetPasswordDto dto)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.PasswordResetToken == token);
+            if (user == null)
+                return BadRequest("Invalid or expired token");
+            if (user.PasswordResetTokenExpiry < DateTime.UtcNow)
+                return BadRequest("Token has expired");
+            if (dto.NewPassword != dto.ConfirmPassword)
+                return BadRequest("Password don't match");
+            user.Password = _passwordHasher.HashPassword(user, dto.NewPassword);
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpiry = null;
+            await _db.SaveChangesAsync();
+            return Ok("Password has been changed successfully");
         }
         private string GenerateJwtToken(User user)
         {
@@ -140,7 +206,15 @@ namespace ServiceApp.Controllers
         [HttpGet("workers")]
         public async Task<IActionResult> GetAvailableWorkers()
         {
-            var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true);
+            var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true)
+                                .Select(u => new
+                                {
+                                    u.Id,
+                                    u.Name,
+                                    u.PhoneNumber,
+                                    u.WorkerSpecialty,
+                                    u.IsAvailable
+                                });
             var workers = await query.ToListAsync();
             return Ok(workers);
         }
@@ -157,7 +231,8 @@ namespace ServiceApp.Controllers
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var username = User.FindFirst(ClaimTypes.Name)?.Value;
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
-            return Ok(new {
+            return Ok(new
+            {
                 UserId = userId,
                 name = username,
                 Role = role
@@ -179,8 +254,15 @@ namespace ServiceApp.Controllers
 
             return Ok(new { worker.Id, worker.IsAvailable });
         }
-
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetAll() => Ok(await _db.Users.ToListAsync());
+
+        private string GenerateToken()
+        {
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace("/", "_")
+            .Replace("+", "-");
+        }
     }
 }

@@ -46,6 +46,7 @@ builder.Services
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
+builder.Services.AddTransient<IEmailService, EmailService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
