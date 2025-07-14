@@ -18,7 +18,7 @@ var dbUser = Environment.GetEnvironmentVariable("POSTGRES_USER");
 var dbPass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
 
 
-var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
+var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass};SSL Mode=Require;Trust Server Certificate=true";
 
 var jwtKey = Environment.GetEnvironmentVariable("JWT__KEY");
 
