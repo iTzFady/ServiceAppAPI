@@ -7,7 +7,6 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
 using ServiceApp.Models;
-using Microsoft.Extensions.Options;
 
 Env.Load();
 
@@ -48,8 +47,6 @@ builder.Services
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 
-// Add services to the container.
-
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -67,6 +64,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.Migrate();
+}
+
 app.UseCors("AllowAll");
 
 // Configure the HTTP request pipeline.
