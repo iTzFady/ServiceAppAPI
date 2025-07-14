@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
 using ServiceApp.Models;
+using Microsoft.Extensions.Options;
 
 Env.Load();
 
@@ -27,7 +28,8 @@ builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => {
+    .AddJwtBearer(options =>
+    {
         options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -49,10 +51,21 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());  
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
+app.UseCors("AllowAll");
 
 // Configure the HTTP request pipeline.
 
