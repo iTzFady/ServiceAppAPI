@@ -9,5 +9,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app/publish .
 ENV ASPNETCORE_URLS=http://+:8080
+RUN mkdir -p /app/keys && chmod 777 /app/keys
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_DATA_PROTECTION__KEYRING_PATH=/app/keys
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "ServiceApp.dll"]
