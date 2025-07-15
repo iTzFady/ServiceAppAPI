@@ -72,7 +72,7 @@ namespace ServiceApp.Controllers
             user.Password = _passwordHasher.HashPassword(user, registerRequest.Password);
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
-            var confirmationLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/confirm-email?token={user.EmailConfirmationToken}&email={user.Email}";
+            var confirmationLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/api/user/confirm-email?token={user.EmailConfirmationToken}&email={user.Email}";
             await _emailService.SendEmailAsync(
                 user.Email,
                 "Confirm your email",
@@ -131,7 +131,7 @@ namespace ServiceApp.Controllers
             });
         }
         [HttpPost("confirm-email")]
-        public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
+        public async Task<IActionResult> ConfirmEmail([FromRoute] ConfirmEmailDto dto)
         {
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
             if (user == null)
