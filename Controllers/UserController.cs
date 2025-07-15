@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -79,12 +78,6 @@ namespace ServiceApp.Controllers
                 $"Please confirm your email by clicking <a href='{confirmationLink}'>here</a>");
             return Ok(new
             {
-                user.Id,
-                user.Name,
-                user.Email,
-                user.Role,
-                user.Region,
-                user.WorkerSpecialty,
                 Message = "Registration successful. Please check your email to confirm your account."
             });
         }
@@ -124,7 +117,6 @@ namespace ServiceApp.Controllers
                 {
                     user.Id,
                     user.Name,
-                    user.Email,
                     user.Role,
                     user.Region,
                 }
@@ -213,7 +205,12 @@ namespace ServiceApp.Controllers
                                     u.Name,
                                     u.PhoneNumber,
                                     u.WorkerSpecialty,
-                                    u.IsAvailable
+                                    u.IsAvailable,
+                                    AverageRating = _db.Ratings
+                                        .Where(r => r.RatedUserId == u.Id)
+                                        .Average(r => (double?)r.Stars) ?? 0.0,
+                                    RatingCount = _db.Ratings
+                                        .Count(r => r.RatedUserId == u.Id)
                                 });
             var workers = await query.ToListAsync();
             return Ok(workers);
