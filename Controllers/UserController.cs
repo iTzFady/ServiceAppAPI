@@ -156,7 +156,7 @@ namespace ServiceApp.Controllers
             user.PasswordResetToken = GenerateToken();
             user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
             await _db.SaveChangesAsync();
-            var resetLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/reset-password?token={user.PasswordResetToken}&email={user.Email}";
+            var resetLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/api/user/reset-password?token={user.PasswordResetToken}&email={user.Email}";
             await _emailService.SendEmailAsync(
                 user.Email,
                 "Reset your password",

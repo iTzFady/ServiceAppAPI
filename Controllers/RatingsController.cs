@@ -16,7 +16,8 @@ namespace ServiceApp.Controllers
         public RatingsController(AppDbContext db) => _db = db;
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> CreateRating([FromBody] RatingDto ratingDto) {
+        public async Task<IActionResult> CreateRating([FromBody] RatingDto ratingDto)
+        {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
