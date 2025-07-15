@@ -131,7 +131,7 @@ namespace ServiceApp.Controllers
             });
         }
         [HttpPost("confirm-email")]
-        public async Task<IActionResult> ConfirmEmail([FromRoute] ConfirmEmailDto dto)
+        public async Task<IActionResult> ConfirmEmail([FromQuery] ConfirmEmailDto dto)
         {
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
             if (user == null)
