@@ -164,7 +164,7 @@ namespace ServiceApp.Controllers
             );
             return Ok("If an account with this email exists, a password reset link has been sent");
         }
-        [HttpPost("reset-password/{token}")]
+        [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromRoute] string token, [FromBody] ResetPasswordDto dto)
         {
             var user = await _db.Users.FirstOrDefaultAsync(u => u.PasswordResetToken == token);
