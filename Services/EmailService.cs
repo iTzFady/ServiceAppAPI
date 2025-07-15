@@ -34,7 +34,7 @@ public class EmailService : IEmailService
     //     mailMessage.To.Add(email);
     //     await Client.SendMailAsync(mailMessage);
     // }
-    public async Task SendEmailAsync(string toEmail, string subject, string htmlContent)
+    public async Task SendEmailAsync(string to, string subject, string html)
     {
         var apiKey = _config["ElasticEmail:ApiKey"];
         var from = _config["ElasticEmail:FromEmail"];
@@ -43,9 +43,9 @@ public class EmailService : IEmailService
         var payload = new
         {
             from,
-            toEmail,
+            to,
             subject,
-            htmlContent
+            html
         };
 
         var req = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
