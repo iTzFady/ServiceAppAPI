@@ -16,5 +16,7 @@ namespace ServiceApp.Models
         public string Reason { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public User ReportedByUser { get; set; }
+        public User ReportedUser { get; set; }
     }
 }

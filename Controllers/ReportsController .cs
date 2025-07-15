@@ -70,11 +70,16 @@ namespace ServiceApp.Controllers
         public async Task<IActionResult> GetUserReports(Guid id)
         {
             var reports = await _db.Reports
+                .Include(r => r.ReportedByUser)
+                .Include(r => r.ReportedUser)
                 .Where(r => r.ReportedUserId == id)
                 .Select(r => new
                 {
                     r.Id,
                     r.ReportedByUserId,
+                    ReportedByUserName = r.ReportedByUser.Name,
+                    r.ReportedUserId,
+                    ReportedUserName = r.ReportedUser.Name,
                     r.Reason,
                     r.CreatedAt
                 })
