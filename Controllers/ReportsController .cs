@@ -66,7 +66,7 @@ namespace ServiceApp.Controllers
         }
 
         [Authorize(Roles = "Admin,SuperAdmin")]
-        [HttpGet("reports/user/{id}")]
+        [HttpGet("user/{id}")]
         public async Task<IActionResult> GetUserReports(Guid id)
         {
             var reports = await _db.Reports
