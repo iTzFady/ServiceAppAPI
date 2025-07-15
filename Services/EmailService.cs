@@ -40,25 +40,22 @@ public class EmailService : IEmailService
         var from = _config["ElasticEmail:FromEmail"];
         var fromName = _config["ElasticEmail:FromName"];
 
-        var values = new Dictionary<string, string>
+        var payload = new
         {
-            { "apikey", apiKey },
-            { "from", from },
-            { "fromName", fromName },
-            { "to", toEmail },
-            { "subject", subject },
-            { "bodyHtml", htmlContent },
-            { "isTransactional", "true" }
+            from,
+            toEmail,
+            subject,
+            htmlContent
         };
 
-        var content = new FormUrlEncodedContent(values);
+        var req = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
+        req.Headers.Add("Authorization", $"Bearer {apiKey}");
+        req.Content = JsonContent.Create(payload);
 
-        var response = await _httpClient.PostAsync("https://api.elasticemail.com/v2/email/send", content);
-        var result = await response.Content.ReadAsStringAsync();
+        var res = await _httpClient.SendAsync(req);
+        var result = await res.Content.ReadAsStringAsync();
 
-        if (!response.IsSuccessStatusCode || !result.Contains("\"success\":true"))
-        {
-            throw new Exception($"Elastic Email API Error: {result}");
-        }
+        if (!res.IsSuccessStatusCode)
+            throw new Exception($"Resend failed: {result}");
     }
 }
