@@ -5,9 +5,10 @@ public class EmailService : IEmailService
 {
     private readonly IConfiguration _config;
     private readonly HttpClient _httpClient;
-    public EmailService(IConfiguration config)
+    public EmailService(IConfiguration config, HttpClient httpClient)
     {
-
+        _config = config;
+        _httpClient = httpClient;
     }
     // public async Task SendEmailAsync(string email, string subject, string message)
     // {
