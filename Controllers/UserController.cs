@@ -179,8 +179,5 @@ namespace ServiceApp.Controllers
 
             return Ok(new { worker.Id, worker.IsAvailable });
         }
-
-        [HttpGet]
-        public async Task<IActionResult> GetAll() => Ok(await _db.Users.ToListAsync());
     }
 }
