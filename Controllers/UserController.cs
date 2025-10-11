@@ -144,12 +144,6 @@ namespace ServiceApp.Controllers
             var workers = await query.ToListAsync();
             return Ok(workers);
         }
-        //public async Task<IActionResult> GetAvailableWorkers([FromQuery] Specialty specialty) {
-
-        //    var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true && u.WorkerSpecialty == specialty);
-        //    var workers = await query.ToListAsync();
-        //    return Ok(workers);
-        //}
         [Authorize]
         [HttpGet("me")]
         public IActionResult GetCurrentUser()
