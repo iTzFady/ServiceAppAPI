@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ServiceApp.Data;
@@ -11,9 +12,11 @@ using ServiceApp.Data;
 namespace ServiceApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250714200831_ResetPassword")]
+    partial class ResetPassword
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -77,10 +80,6 @@ namespace ServiceApp.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ReportedByUserId");
-
-                    b.HasIndex("ReportedUserId");
 
                     b.ToTable("Reports");
                 });
@@ -226,25 +225,6 @@ namespace ServiceApp.Migrations
                     b.Navigation("RatedUser");
 
                     b.Navigation("serviceRequest");
-                });
-
-            modelBuilder.Entity("ServiceApp.Models.Report", b =>
-                {
-                    b.HasOne("ServiceApp.Models.User", "ReportedByUser")
-                        .WithMany()
-                        .HasForeignKey("ReportedByUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ServiceApp.Models.User", "ReportedUser")
-                        .WithMany()
-                        .HasForeignKey("ReportedUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ReportedByUser");
-
-                    b.Navigation("ReportedUser");
                 });
 
             modelBuilder.Entity("ServiceApp.Models.ServiceRequest", b =>

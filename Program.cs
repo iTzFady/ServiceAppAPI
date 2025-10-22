@@ -10,24 +10,28 @@ using ServiceApp.Models;
 
 Env.Load();
 
-var dbHost = Environment.GetEnvironmentVariable("DB_HOST");
-var dbPort = Environment.GetEnvironmentVariable("DB_PORT");
-var dbName = Environment.GetEnvironmentVariable("DB_NAME");
-var dbUser = Environment.GetEnvironmentVariable("DB_USER");
-var dbPass = Environment.GetEnvironmentVariable("DB_PASS");
+var dbHost = Environment.GetEnvironmentVariable("PGHOST");
+var dbPort = Environment.GetEnvironmentVariable("PGPORT");
+var dbName = Environment.GetEnvironmentVariable("POSTGRES_DB");
+var dbUser = Environment.GetEnvironmentVariable("POSTGRES_USER");
+var dbPass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
 
 
-var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
+var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass};SSL Mode=Require;Trust Server Certificate=true";
 
 var jwtKey = Environment.GetEnvironmentVariable("JWT__KEY");
+
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddHttpClient<EmailService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => {
+    .AddJwtBearer(options =>
+    {
         options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -43,17 +47,27 @@ builder.Services
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
-
-// Add services to the container.
+builder.Services.AddTransient<IEmailService, EmailService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());  
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 var app = builder.Build();
 
+<<<<<<< HEAD
 
 using (var scope = app.Services.CreateScope())
 {
@@ -61,6 +75,17 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
+=======
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.Migrate();
+}
+
+app.UseCors("AllowAll");
+
+// Configure the HTTP request pipeline.
+>>>>>>> 64815dfbb19a2b8ccb05ecb09d09b7eee6b1ba83
 
 app.UseHttpsRedirection();
 
@@ -70,4 +95,4 @@ app.UseAuthorization();
 app.UseStaticFiles();
 app.MapControllers();
 
-app.Run();
+app.Run($"http://0.0.0.0:{port}");

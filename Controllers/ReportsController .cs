@@ -19,7 +19,8 @@ namespace ServiceApp.Controllers
 
         [Authorize]
         [HttpPost("report/{workerId}")]
-        public async Task<IActionResult> ReportUser([FromRoute] Guid workerId ,[FromBody] string report) {
+        public async Task<IActionResult> ReportUser([FromRoute] Guid workerId, [FromBody] ReportRequestDto report)
+        {
 
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -44,16 +45,18 @@ namespace ServiceApp.Controllers
                 Id = Guid.NewGuid(),
                 ReportedUserId = workerId,
                 ReportedByUserId = userId,
-                Reason = report
+                Reason = report.Report
             };
 
             _db.Reports.Add(reportRequest);
             await _db.SaveChangesAsync();
             int reportCount = await _db.Reports.CountAsync(r => r.ReportedUserId == workerId);
 
-            if (reportCount >= 2) {
+            if (reportCount >= 2)
+            {
                 var worker = await _db.Users.FindAsync(workerId);
-                if (worker != null && !worker.IsBanned) { 
+                if (worker != null && !worker.IsBanned)
+                {
                     worker.IsBanned = true;
                     await _db.SaveChangesAsync();
                 }
@@ -63,14 +66,20 @@ namespace ServiceApp.Controllers
         }
 
         [Authorize(Roles = "Admin,SuperAdmin")]
-        [HttpGet("reports/user/{id}")]
+        [HttpGet("user/{id}")]
         public async Task<IActionResult> GetUserReports(Guid id)
         {
             var reports = await _db.Reports
+                .Include(r => r.ReportedByUser)
+                .Include(r => r.ReportedUser)
                 .Where(r => r.ReportedUserId == id)
-                .Select(r => new {
+                .Select(r => new
+                {
                     r.Id,
                     r.ReportedByUserId,
+                    ReportedByUserName = r.ReportedByUser.Name,
+                    r.ReportedUserId,
+                    ReportedUserName = r.ReportedUser.Name,
                     r.Reason,
                     r.CreatedAt
                 })
