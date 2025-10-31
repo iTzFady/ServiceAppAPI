@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using ApiResponseCode;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,11 +8,13 @@ using ServiceApp.Data;
 using ServiceApp.Models;
 using ServiceApp.Models.DTOs;
 using ServiceApp.Models.Enums;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-
+using static ApiResponseCode.ResponseCodes;
 namespace ServiceApp.Controllers
 {
     [ApiController]
@@ -32,29 +35,45 @@ namespace ServiceApp.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> CreateUser([FromBody] RegisterDto registerRequest)
+        public async Task<IActionResult> CreateUser([FromForm] RegisterDto registerRequest , [FromForm] List<IFormFile>? profilePic )
         {
 
+            if (registerRequest == null)
+            {
+                return BadRequest("Register request is required");
+            }
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
+            if (await _db.Users.AnyAsync(u => u.Email == registerRequest.Email))
+                return BadRequest(new { message = "Email already registered", code = EMAIL_ALREADY_EXISTS });
+
             if (!Regex.IsMatch(registerRequest.PhoneNumber, @"^(010|011|012|015)[0-9]{8}$"))
-                return BadRequest("Invalid phone number format.");
+                return BadRequest(new { message = "Invalid phone number format", code = INVALID_PHONE_FORMAT });
 
             if (await _db.Users.AnyAsync(u => u.PhoneNumber == registerRequest.PhoneNumber))
-                return BadRequest("Phone number already in use");
+                return BadRequest(new { message = "Phone number already in use", code = PHONE_ALREADY_EXISTS });
 
-            if (registerRequest.NationalNumber != null)
+            if (registerRequest.NationalNumber != null && registerRequest.Role == UserRole.Worker)
             {
                 if (!Regex.IsMatch(registerRequest.NationalNumber, @"^[23][0-9]{13}$"))
-                    return BadRequest("Invalid national number format.");
+                    return BadRequest(new { message = "Invalid national number format", code = INVALID_NATIONAL_NUMBER });
                 if (await _db.Users.AnyAsync(u => u.NationalNumber == registerRequest.NationalNumber))
-                    return BadRequest("National number already in use");
+                    return BadRequest(new { message = "National number already in use", code = NATIONAL_NUMBER_EXISTS });
             }
+            string? imagePaths = null;
 
-            if (await _db.Users.AnyAsync(u => u.Email == registerRequest.Email))
-                return BadRequest("Email already registered");
-
+            if (profilePic != null && profilePic.Any())
+            {
+                var uploadDir = Path.Combine("wwwroot", "profilePictures");
+                Directory.CreateDirectory(uploadDir);
+                var image = profilePic.First();
+                var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(image.FileName)}";
+                var savePath = Path.Combine(uploadDir, fileName);
+                using var stream = new FileStream(savePath, FileMode.Create);
+                await image.CopyToAsync(stream);
+                imagePaths = $"/profilePictures/{fileName}";
+            }
             var user = new User
             {
                 Name = registerRequest.Name,
@@ -64,21 +83,20 @@ namespace ServiceApp.Controllers
                 NationalNumber = registerRequest.NationalNumber,
                 Region = registerRequest.Region,
                 WorkerSpecialty = registerRequest.WorkerSpecialty,
-                EmailConfirmationToken = GenerateToken(),
-                EmailConfirmationTokenExpiry = DateTime.UtcNow.AddHours(24)
+                profilePictureUrl= imagePaths,
+                // EmailConfirmationToken = GenerateToken(),
+                // EmailConfirmationTokenExpiry = DateTime.UtcNow.AddHours(24)
             };
             user.Password = _passwordHasher.HashPassword(user, registerRequest.Password);
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
-            var confirmationLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/api/user/confirm-email?token={user.EmailConfirmationToken}&email={user.Email}";
-            await _emailService.SendEmailAsync(
-                user.Email,
-                "Confirm your email",
-                $"Please confirm your email by clicking <a href='{confirmationLink}'>here</a>");
-            return Ok(new
-            {
-                Message = "Registration successful. Please check your email to confirm your account."
-            });
+            return Ok(new { message = "Registration successful", code = ResponseCodes.REGISTRATION_SUCCESSFUL });
+            // var confirmationLink = $"{Environment.GetEnvironmentVariable("CLIENT_URL")}/api/user/confirm-email?token={user.EmailConfirmationToken}&email={user.Email}";
+            // await _emailService.SendEmailAsync(
+            //     user.Email,
+            //     "Confirm your email",
+            //     $"Please confirm your email by clicking <a href='{confirmationLink}'>here</a>");
+            // return Ok("Registration successful. Please check your email to confirm your account.");
         }
 
 
@@ -94,19 +112,19 @@ namespace ServiceApp.Controllers
         .FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null)
             {
-                return Unauthorized(new { message = "Invalid credentials." });
+                return Unauthorized(new { message = "Invalid credentials", code = INVALID_CREDENTIALS });
             }
 
             var result = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
 
             if (result == PasswordVerificationResult.Failed)
             {
-                return Unauthorized(new { message = "Invalid credentials." });
+                return Unauthorized(new { message = "Invalid credentials", code = INVALID_CREDENTIALS });
             }
             if (!user.EmailConfirmed)
-                return Unauthorized("Please confirm your email before logging in");
+                return Unauthorized(new { message = "Please confirm your email before logging in", EMAIL_NOT_CONFIRMED });
             if (user.IsBanned)
-                return Unauthorized("User is Banned");
+                return Unauthorized(new { message = "User is Banned", code = USER_BANNED });
 
             var token = GenerateJwtToken(user);
             return Ok(new
@@ -117,8 +135,9 @@ namespace ServiceApp.Controllers
                     user.Id,
                     user.Name,
                     user.Role,
-                    user.Region,
-                }
+                    user.IsAvailable,
+                },
+                code = LOGIN_SUCCESSFUL
             });
         }
         [HttpGet("confirm-email")]
@@ -178,7 +197,7 @@ namespace ServiceApp.Controllers
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Email, user.Email),
                 new Claim(ClaimTypes.Name, user.Name),
-                new Claim(ClaimTypes.Role, user.Role.ToString())
+                new Claim(ClaimTypes.Role, user.Role.ToString()),
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
@@ -195,39 +214,78 @@ namespace ServiceApp.Controllers
         }
         [Authorize]
         [HttpGet("workers")]
-        public async Task<IActionResult> GetAvailableWorkers()
+        public async Task<IActionResult> GetAvailableWorkers([FromQuery] bool allWorkers = false)
         {
-            var query = _db.Users.Where(u => u.Role == UserRole.Worker && u.IsAvailable == true)
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(userIdClaim))
+                return Unauthorized("User ID claim is missing");
+
+            var currentUserId = Guid.Parse(userIdClaim);
+
+            var query = _db.Users.Where(allWorkers ? u => u.Role == UserRole.Worker && u.Id != currentUserId : u => u.Role == UserRole.Worker && u.IsAvailable == true && u.Id != currentUserId)
                                 .Select(u => new
                                 {
                                     u.Id,
                                     u.Name,
-                                    u.PhoneNumber,
                                     u.WorkerSpecialty,
                                     u.IsAvailable,
+                                    u.Region,
+                                    u.profilePictureUrl,
                                     AverageRating = _db.Ratings
                                         .Where(r => r.RatedUserId == u.Id)
                                         .Average(r => (double?)r.Stars) ?? 0.0,
-                                    RatingCount = _db.Ratings
-                                        .Count(r => r.RatedUserId == u.Id)
                                 });
             var workers = await query.ToListAsync();
             return Ok(workers);
         }
+
         [Authorize]
         [HttpGet("me")]
-        public IActionResult GetCurrentUser()
+        public async Task<IActionResult> GetCurrentUser()
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var username = User.FindFirst(ClaimTypes.Name)?.Value;
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (!Guid.TryParse(userId, out var id))
+                return BadRequest("Invalid user ID");
+
+            var user = await _db.Users.FindAsync(id);
+            if (user == null)
+                return NotFound("User not found");
+
             return Ok(new
             {
-                UserId = userId,
+                id = userId,
                 name = username,
-                Role = role
+                role = role,
+                isAvailable = user.IsAvailable,
+                profilePictureUrl = user.profilePictureUrl,
+                rating = _db.Ratings
+                            .Where(r => r.RatedUserId.ToString() == userId)
+                            .Average(r => (double?)r.Stars) ?? 0.0,
             });
         }
+        [HttpGet("profile/{id}")]
+        public async Task <IActionResult> GetUserById([FromRoute] Guid id)
+        {
+            var user = await _db.Users.FindAsync(id);
+            if (user == null)
+                return NotFound("User not found");
+            return Ok(new
+            {
+                name = user.Name,
+                role = user.Role,
+                isAvailable = user.IsAvailable,
+                specialty = user.WorkerSpecialty,
+                profilePictureUrl = user.profilePictureUrl,
+                rating = _db.Ratings
+                                .Where(r => r.RatedUserId.ToString() == id.ToString())
+                                .Average(r => (double?)r.Stars) ?? 0.0,
+            });
+        }
+
 
         [Authorize(Roles = "Worker")]
         [HttpPut("availability")]
@@ -242,7 +300,35 @@ namespace ServiceApp.Controllers
             worker.IsAvailable = isAvailable;
             await _db.SaveChangesAsync();
 
-            return Ok(new { worker.Id, worker.IsAvailable });
+            return Ok(new { worker.IsAvailable });
         }
+        [Authorize(Roles = "Admin")]
+        [HttpGet]
+        public async Task<IActionResult> GetAll() => Ok(await _db.Users.ToListAsync());
+
+        private string GenerateToken()
+        {
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace("/", "_")
+            .Replace("+", "-");
+        }
+
+
+        [HttpPost("pushToken")]
+        public async Task<IActionResult> SavePushToken([FromBody] NotificationTokenDto dto)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdClaim);
+            var user = await _db.Users.FindAsync(userId);
+            if (user == null) return NotFound();
+
+            user.ExpoPushToken = dto.Token;
+            await _db.SaveChangesAsync();
+            return Ok();
+        }
+
+
     }
 }

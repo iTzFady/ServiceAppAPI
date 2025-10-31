@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ServiceApp.Data;
@@ -11,9 +12,11 @@ using ServiceApp.Data;
 namespace ServiceApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251028104621_MessageModel")]
+    partial class MessageModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -46,9 +49,6 @@ namespace ServiceApp.Migrations
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("isImage")
-                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -189,9 +189,6 @@ namespace ServiceApp.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
-
-                    b.Property<string>("ExpoPushToken")
-                        .HasColumnType("text");
 
                     b.Property<bool?>("IsAvailable")
                         .HasColumnType("boolean");

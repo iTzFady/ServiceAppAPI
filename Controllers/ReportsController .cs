@@ -18,8 +18,8 @@ namespace ServiceApp.Controllers
 
 
         [Authorize]
-        [HttpPost("report/{workerId}")]
-        public async Task<IActionResult> ReportUser([FromRoute] Guid workerId, [FromBody] ReportRequestDto report)
+        [HttpPost("report/{reportedUserId}")]
+        public async Task<IActionResult> ReportUser([FromRoute] Guid reportedUserId, [FromBody] ReportRequestDto report)
         {
 
             if (!ModelState.IsValid)
@@ -27,41 +27,50 @@ namespace ServiceApp.Controllers
 
             var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
-            var existingReport = await _db.Reports.FirstOrDefaultAsync(r => r.ReportedUserId == workerId && r.ReportedByUserId == userId);
-
-            if (existingReport != null)
-                return BadRequest("You have already reported this worker.");
+            if (userId == reportedUserId)
+                return BadRequest("You cannot report yourself.");
 
             var hasWorkedTogether = await _db.ServiceRequests.AnyAsync(r =>
-                 r.RequestedByUserId == userId &&
-                 r.RequestedForUserId == workerId &&
-                 r.Status == RequestStatus.Completed);
+                r.RequestedByUserId == userId || r.RequestedForUserId == userId &&
+                r.RequestedForUserId == reportedUserId || r.RequestedByUserId == reportedUserId &&
+                r.Status == RequestStatus.Completed);
 
             if (!hasWorkedTogether)
                 return BadRequest("You can only report a worker you have previously worked with.");
 
+            bool existingReport = await _db.Reports
+                 .AnyAsync(r => r.ReportedUserId == reportedUserId && r.ReportedByUserId == userId);
+
+            if (existingReport)
+                return BadRequest("You have already reported this worker.");
+
             var reportRequest = new Report
             {
                 Id = Guid.NewGuid(),
-                ReportedUserId = workerId,
+                ReportedUserId = reportedUserId,
                 ReportedByUserId = userId,
                 Reason = report.Report
             };
 
             _db.Reports.Add(reportRequest);
             await _db.SaveChangesAsync();
-            int reportCount = await _db.Reports.CountAsync(r => r.ReportedUserId == workerId);
+
+            int reportCount = await _db.Reports
+                .Where(r => r.ReportedUserId == reportedUserId)
+                .Select(r => r.ReportedByUserId)
+                .Distinct()
+                .CountAsync();
 
             if (reportCount >= 2)
             {
-                var worker = await _db.Users.FindAsync(workerId);
-                if (worker != null && !worker.IsBanned)
+                var reportedUser = await _db.Users.FindAsync(reportedUserId);
+                if (reportedUser != null && !reportedUser.IsBanned)
                 {
-                    worker.IsBanned = true;
+                    reportedUser.IsBanned = true;
                     await _db.SaveChangesAsync();
                 }
             }
-            return Ok(new { message = "Report Submitted." });
+            return Ok("Report Submitted.");
 
         }
 

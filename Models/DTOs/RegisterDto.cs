@@ -9,11 +9,11 @@ namespace ServiceApp.Models.DTOs
         public UserRole Role { get; set; }
         [EmailAddress]
         required public string Email { get; set; }
-        [StringLength(100 , MinimumLength = 6)]
+        [StringLength(100, MinimumLength = 6)]
         required public string Password { get; set; }
         required public string PhoneNumber { get; set; }
         public string? NationalNumber { get; set; }
-        required public string Region { get; set; }
+        public string? Region { get; set; }
         public Specialty? WorkerSpecialty { get; set; }
     }
 }
