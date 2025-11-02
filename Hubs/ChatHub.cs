@@ -4,8 +4,11 @@ using ServiceApp.Models;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using ServiceApp.Services;
+using Microsoft.AspNetCore.Authorization;
+using ServiceApp.Models.Enums;
 namespace ServiceApp.Hubs
 {
+    [Authorize]
     public class ChatHub : Hub
     {
         private readonly AppDbContext _db;
@@ -37,7 +40,7 @@ namespace ServiceApp.Hubs
             }
         }
 
-        public async Task SendMessage(string senderUserId, string receiverUserId, string message , bool isImage = false)
+        public async Task SendMessage(Guid senderUserId, Guid receiverUserId, string message , bool isImage = false)
         {
             var chatMessage = new ChatMessage
             {
@@ -51,22 +54,24 @@ namespace ServiceApp.Hubs
             _db.ChatMessages.Add(chatMessage);
             await _db.SaveChangesAsync();
 
-            await Clients.Users(senderUserId, receiverUserId)
+            await Clients.Users(senderUserId.ToString(), receiverUserId.ToString())
                 .SendAsync("ReceiveMessage", senderUserId, receiverUserId, message, chatMessage.Id, isImage);
 
 
-            var isReceiverOnline = _presenceService.IsUserConnected(receiverUserId);
+            var isReceiverOnline = _presenceService.IsUserConnected(receiverUserId.ToString());
 
             if (!isReceiverOnline) {
-                var receiver = await _db.Users.FindAsync(Guid.Parse(receiverUserId));
+                var receiver = await _db.Users.FindAsync(Guid.Parse(receiverUserId.ToString()));
+                var sender = await _db.Users.FindAsync(senderUserId);
 
-                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken))
+                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken) && sender !=null)
                 {
                     await _pushService.SendPushAsync(
                             token: receiver.ExpoPushToken,
-                            title: "New Message",
-                            body: message,
-                            data: new { senderUserId }
+                            title: $"رسالة جديدة من {sender.Name}",
+                            body: isImage ? "أرسل لك صورة" : message,
+                            data: new { senderUserId },
+                            type: NotificationType.Message
                         );
                 }
 

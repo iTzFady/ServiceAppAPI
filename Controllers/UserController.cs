@@ -321,6 +321,16 @@ namespace ServiceApp.Controllers
             if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
 
             var userId = Guid.Parse(userIdClaim);
+
+            var otherUsersWithToken = await _db.Users
+                    .Where(u => u.ExpoPushToken == dto.Token && u.Id != userId)
+                    .ToListAsync();
+
+            foreach (var otherUser in otherUsersWithToken)
+            {
+                otherUser.ExpoPushToken = null;
+            }
+
             var user = await _db.Users.FindAsync(userId);
             if (user == null) return NotFound();
 
@@ -328,7 +338,38 @@ namespace ServiceApp.Controllers
             await _db.SaveChangesAsync();
             return Ok();
         }
+        [HttpDelete("deleteToken")]
+        public async Task<IActionResult> UnregisterToken()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
 
+            if (!Guid.TryParse(userIdClaim, out var userId))
+                return BadRequest("Invalid user ID");
+
+            var user = await _db.Users.FindAsync(userId);
+
+            if (user == null) return NotFound();
+
+            var tokenToRemove = user.ExpoPushToken;
+            user.ExpoPushToken = null;
+
+
+            if (!string.IsNullOrEmpty(tokenToRemove))
+            {
+                var otherUsers = await _db.Users
+                    .Where(u => u.ExpoPushToken == tokenToRemove && u.Id != user.Id)
+                    .ToListAsync();
+
+                foreach (var otherUser in otherUsers)
+                {
+                    otherUser.ExpoPushToken = null;
+                }
+            }
+            await _db.SaveChangesAsync();
+
+            return Ok();
+        }
 
     }
 }

@@ -7,8 +7,8 @@ namespace ServiceApp.Models
     {
         [Key]
         public Guid Id { get; set; }
-        public string SenderId { get; set; }
-        public string ReceiverId { get; set; }
+        public Guid SenderId { get; set; }
+        public Guid ReceiverId { get; set; }
         public string Message { get; set; }
         public bool IsRead { get; set; } = false;
         [Column(TypeName = "timestamp without time zone")]

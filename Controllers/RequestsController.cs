@@ -9,6 +9,7 @@ using ServiceApp.Models.Enums;
 using System.Security.Claims;
 using ServiceApp.Hubs;
 using static ApiResponseCode.ResponseCodes;
+using ServiceApp.Services;
 
 namespace ServiceApp.Controllers
 {
@@ -18,9 +19,13 @@ namespace ServiceApp.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IHubContext<RequestsHub> _hubContext;
-        public RequestsController(AppDbContext db, IHubContext<RequestsHub> hubContext) {
+        private readonly PushNotificationService _pushService;
+        private readonly PresenceService _presenceService;
+        public RequestsController(AppDbContext db, IHubContext<RequestsHub> hubContext, PresenceService presenceService, PushNotificationService pushService) {
             _db = db;
             _hubContext = hubContext;
+            _presenceService = presenceService;
+            _pushService = pushService;
         }
 
         [HttpPost]
@@ -107,6 +112,27 @@ namespace ServiceApp.Controllers
 
             await _hubContext.Clients.User(dto.RequestedForUserId.ToString()).SendAsync("NewRequestCreated", requestDto);
 
+
+            var isReceiverOnline = _presenceService.IsUserConnected(dto.RequestedForUserId.ToString());
+
+            if (!isReceiverOnline)
+            {
+                var receiver = await _db.Users.FindAsync(Guid.Parse(dto.RequestedForUserId.ToString()));
+
+                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken))
+                {
+                    await _pushService.SendPushAsync(
+                            token: receiver.ExpoPushToken,
+                            title: "طلب جديد",
+                            body: "لديكم طلب جديد، يرجى الاطلاع عليه",
+                            data: new { dto.RequestedByUserId },
+                            type: NotificationType.Alert
+                        );
+                }
+
+
+            }
+
             return Ok(new {code= REQUEST_CREATED , message= "Request has been created successfully" });
         }
         
@@ -144,6 +170,27 @@ namespace ServiceApp.Controllers
                 status = req.Status.ToString()
             });
 
+            var isReceiverOnline = _presenceService.IsUserConnected(req.RequestedByUserId.ToString());
+
+            if (!isReceiverOnline)
+            {
+                var receiver = await _db.Users.FindAsync(Guid.Parse(req.RequestedByUserId.ToString()));
+
+                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken))
+                {
+                    await _pushService.SendPushAsync(
+                            token: receiver.ExpoPushToken,
+                            title: "تم قبول الطلب",
+                            body: $"{req.RequestedForUser.Name} قبل طلبك",
+                            data: new { req.RequestedForUserId },
+                            type: NotificationType.Alert
+                        );
+                }
+
+
+            }
+
+
 
             return Ok(new
             {
@@ -158,7 +205,10 @@ namespace ServiceApp.Controllers
         [HttpDelete("{id}/reject")]
         public async Task<IActionResult> RejectRequest(Guid id)
         {
-            var req = await _db.ServiceRequests.FindAsync(id);
+            var req = await _db.ServiceRequests
+                .Include(r => r.RequestedForUser)
+                .Include(r => r.RequestedByUser)
+                .FirstOrDefaultAsync(r => r.Id == id);
             if (req == null) return NotFound(new{ code = REQUEST_NOT_FOUND });
 
             if (req.Status != RequestStatus.Pending && req.Status != RequestStatus.Accepted)
@@ -171,6 +221,29 @@ namespace ServiceApp.Controllers
                 requestId = req.Id,
                 status = "Rejected"
             });
+
+
+            var isReceiverOnline = _presenceService.IsUserConnected(req.RequestedByUserId.ToString());
+
+            if (!isReceiverOnline)
+            {
+                var receiver = await _db.Users.FindAsync(req.RequestedByUserId);
+
+                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken))
+                {
+                    await _pushService.SendPushAsync(
+                            token: receiver.ExpoPushToken,
+                            title: "تم رفض الطلب",
+                            body: $"قام {req.RequestedForUser.Name} برفض طلبكم.",
+                            data: new { req.RequestedForUserId },
+                            type: NotificationType.Alert
+                        );
+                }
+
+
+            }
+
+
             return Ok(new { message = "Request rejected and deleted." ,code = REQUEST_REJECTED });
         }
 
@@ -179,7 +252,10 @@ namespace ServiceApp.Controllers
         [HttpPut("{id}/cancel")]
         public async Task<IActionResult> CancelRequest(Guid id)
         {
-            var req = await _db.ServiceRequests.FindAsync(id);
+            var req = await _db.ServiceRequests
+                .Include(r => r.RequestedForUser)
+                .Include(r => r.RequestedByUser)
+                .FirstOrDefaultAsync(r => r.Id == id);
             if (req == null) return NotFound();
 
             req.Status = RequestStatus.Canceled;
@@ -191,6 +267,28 @@ namespace ServiceApp.Controllers
                 status = req.Status.ToString()
             });
 
+
+            var isReceiverOnline = _presenceService.IsUserConnected(req.RequestedByUserId.ToString());
+
+            if (!isReceiverOnline)
+            {
+                var receiver = await _db.Users.FindAsync(req.RequestedByUserId);
+
+                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken))
+                {
+                    await _pushService.SendPushAsync(
+                            token: receiver.ExpoPushToken,
+                            title: "تم إلغاء الطلب",
+                            body: $"قام {req.RequestedForUser.Name} بإلغاء طلبكم.",
+                            data: new { req.RequestedForUserId },
+                            type: NotificationType.Alert
+                        );
+                }
+
+
+            }
+
+
             return Ok(new { message = "Request canceled", code= REQUEST_CANCELLED });
         }
 
@@ -198,7 +296,10 @@ namespace ServiceApp.Controllers
         [HttpPut("{id}/complete")]
         public async Task<IActionResult> CompleteRequest(Guid id)
         {
-            var req = await _db.ServiceRequests.FindAsync(id);
+            var req = await _db.ServiceRequests
+                .Include(r => r.RequestedForUser)
+                .Include(r => r.RequestedByUser)
+                .FirstOrDefaultAsync(r => r.Id == id);
             if (req == null) return NotFound();
 
             req.Status = RequestStatus.Completed;
@@ -217,6 +318,29 @@ namespace ServiceApp.Controllers
                 status = req.Status.ToString(),
                 completedTime = req.CompletedTime
             });
+
+
+            var isReceiverOnline = _presenceService.IsUserConnected(req.RequestedByUserId.ToString());
+
+            if (!isReceiverOnline)
+            {
+                var receiver = await _db.Users.FindAsync(Guid.Parse(req.RequestedByUserId.ToString()));
+
+                if (!string.IsNullOrEmpty(receiver?.ExpoPushToken))
+                {
+                    await _pushService.SendPushAsync(
+                            token: receiver.ExpoPushToken,
+                            title: "تم إتمام الطلب",
+                            body: $"قام {req.RequestedForUser.Name} بإتمام طلبكم.",
+                            data: new { req.RequestedForUserId },
+                            type: NotificationType.Alert
+
+                        );
+                }
+
+
+            }
+
             return Ok(new{ message = "Request completed" , code = REQUEST_COMPLETED});
         }
 

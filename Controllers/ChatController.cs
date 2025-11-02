@@ -17,8 +17,8 @@ namespace ServiceApp.Controllers
         public async Task<IActionResult> GetChatHistory(Guid userId, Guid otherUserId)
         {
             var messages = await _db.ChatMessages
-                .Where(m => (m.SenderId == userId.ToString() && m.ReceiverId == otherUserId.ToString()) ||
-                            (m.SenderId == otherUserId.ToString() && m.ReceiverId == userId.ToString()))
+                .Where(m => (m.SenderId.ToString() == userId.ToString() && m.ReceiverId.ToString() == otherUserId.ToString()) ||
+                            (m.SenderId.ToString() == otherUserId.ToString() && m.ReceiverId.ToString()== userId.ToString()))
                 .OrderBy(m => m.Timestamp)
                 .ToListAsync();
             return Ok(messages);

@@ -1,12 +1,21 @@
-﻿namespace ServiceApp.Services
+﻿using Microsoft.EntityFrameworkCore;
+using ServiceApp.Data;
+using ServiceApp.Models;
+using ServiceApp.Models.Enums;
+namespace ServiceApp.Services
 {
     public class PushNotificationService
     {
         private readonly HttpClient _http;
-        public PushNotificationService(HttpClient http) => _http = http;
+        private readonly AppDbContext _db;
 
+        public PushNotificationService(HttpClient http , AppDbContext db)
+        {
+            _http = http;
+            _db = db;
+        }
 
-        public async Task<ExpoResponse?> SendPushAsync(string token, string title, string body, object? data = null) {
+        public async Task<ExpoResponse?> SendPushAsync(string token, string title, string body, NotificationType type, object? data = null) {
             var payload = new
             {
                 to = token,
@@ -20,10 +29,30 @@
             var response = await _http.PostAsJsonAsync(url, payload);
             if (!response.IsSuccessStatusCode) { 
                 var text = await response.Content.ReadAsStringAsync();
-                Console.WriteLine(text);
                 return null;
             }
 
+            var notificationOwner = await _db.Users
+                 .FirstOrDefaultAsync(r => r.ExpoPushToken == token );
+
+            if ( notificationOwner == null ) return null;
+
+            if (notificationOwner != null)
+            {
+
+                var notification = new Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = notificationOwner.Id,
+                    Title = title,
+                    body = body,
+                    Data = data != null ? System.Text.Json.JsonSerializer.Serialize(data) : null,
+                    ReceivedAt = DateTime.Now,
+                };
+                _db.Notifications.Add(notification);
+
+                await _db.SaveChangesAsync();
+            }
             var json = await response.Content.ReadFromJsonAsync<ExpoResponse>();
             return json;
         }
